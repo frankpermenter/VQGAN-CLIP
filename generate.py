@@ -90,10 +90,18 @@ vq_parser.add_argument("-d",    "--deterministic", action='store_true', help="En
 vq_parser.add_argument("-aug",  "--augments", nargs='+', action='append', type=str, choices=['Ji','Sh','Gn','Pe','Ro','Af','Et','Ts','Cr','Er','Re'], help="Enabled augments (latest vut method only)", default=[], dest='augments')
 vq_parser.add_argument("-vsd",  "--video_style_dir", type=str, help="Directory with video frames to style", default=None, dest='video_style_dir')
 vq_parser.add_argument("-cd",   "--cuda_device", type=str, help="Cuda device to use", default="cpu", dest='cuda_device')
+vq_parser.add_argument("-results",   "--results", type=str, help="Location to save iterations", default="./results_frank/", dest='results_dir')
+
+
 
 
 # Execute the parse_args() method
 args = vq_parser.parse_args()
+
+
+results_dir = args.results_dir 
+if not os.path.exists(results_dir):
+    os.mkdir(results_dir)
 
 if not args.prompts and not args.image_prompts:
     args.prompts = "A cute, smiling, Nerdy Rodent"
@@ -102,7 +110,9 @@ if args.cudnn_determinism:
    torch.backends.cudnn.deterministic = True
 
 if not args.augments:
-   args.augments = [['Af', 'Pe', 'Ji', 'Er']]
+   #args.augments = [['Af', 'Pe', 'Ji', 'Er']]
+   #args.augments = [['Af']]
+   args.augments = [['Gn']]
 
 # Split text prompts using the pipe character (weights are split later)
 if args.prompts:
@@ -133,7 +143,8 @@ if args.make_video or args.make_zoom_video:
 
 # Fallback to CPU if CUDA is not found and make sure GPU video rendering is also disabled
 # NB. May not work for AMD cards?
-args.cuda_device == 'cpu'
+#args.cuda_device = 'cuda'
+args.cuda_device = 'cpu'
 if not args.cuda_device == 'cpu' and not torch.cuda.is_available():
     args.cuda_device = 'cpu'
     args.video_fps = 0
@@ -315,7 +326,7 @@ class MakeCutouts(nn.Module):
             elif item == 'Sh':
                 augment_list.append(K.RandomSharpness(sharpness=0.3, p=0.5))
             elif item == 'Gn':
-                augment_list.append(K.RandomGaussianNoise(mean=0.0, std=1., p=0.5))
+                augment_list.append(K.RandomGaussianNoise(mean=0.0, std=0.01, p=0.001))
             elif item == 'Pe':
                 augment_list.append(K.RandomPerspective(distortion_scale=0.7, p=0.7))
             elif item == 'Ro':
@@ -554,6 +565,8 @@ perceptor, preprocess = clip.load("ViT-B/32", device=device)
 # perceptor.visual.positional_embedding.data=clamp_with_grad(clock,0,1)
 
 cut_size = perceptor.visual.input_resolution
+print("cut size")
+print(cut_size)
 f = 2**(model.decoder.num_resolutions - 1)
 
 # Cutout class options:
@@ -770,7 +783,7 @@ def train(i):
 
     img = np.array(out.mul(255).clamp(0, 255)[0].cpu().detach().numpy().astype(np.uint8))[:,:,:]
     img = np.transpose(img, (1, 2, 0))
-    imageio.imwrite('./steps_reduced_siz//' + str(i) + '.png', np.array(img))
+    imageio.imwrite(results_dir + str(i) + '.png', np.array(img))
 
 
 i = 0 # Iteration counter
