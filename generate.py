@@ -45,7 +45,7 @@ warnings.filterwarnings('ignore')
 print("HEHE")
 
 # Check for GPU and reduce the default image size if low VRAM
-default_image_size = 128  # >8GB VRAM
+default_image_size = 224  # >8GB VRAM
 #if not torch.cuda.is_available():
 #    default_image_size = 256  # no GPU found
 #elif get_device_properties(0).total_memory <= 2 ** 33:  # 2 ** 33 = 8,589,934,592 bytes = 8 GB
@@ -318,6 +318,7 @@ class MakeCutouts(nn.Module):
         self.cutn = cutn
         self.cut_pow = cut_pow # not used with pooling
         
+        self.transform = transforms.Resize((self.cut_size,self.cut_size))
         # Pick your own augments & their order
         augment_list = []
         for item in args.augments[0]:
@@ -349,7 +350,7 @@ class MakeCutouts(nn.Module):
         # self.noise_fac = False
 
         # Uncomment if you like seeing the list ;)
-        print("CUT OUTS!")
+        print("Augment OUTS!")
         print(augment_list)
         
         # Pooling
@@ -357,6 +358,7 @@ class MakeCutouts(nn.Module):
         self.max_pool = nn.AdaptiveMaxPool2d((self.cut_size, self.cut_size))
 
     def forward(self, input):
+        return input
         cutouts = []
         
         for _ in range(self.cutn):            
@@ -369,6 +371,16 @@ class MakeCutouts(nn.Module):
         if self.noise_fac:
             facs = batch.new_empty([self.cutn, 1, 1, 1]).uniform_(0, self.noise_fac)
             batch = batch + facs * torch.randn_like(batch)
+
+
+        #blah = F.interpolate(input.squeeze(0), size = (3, self.cut_size, self.cut_size)).unsqueeze(0)
+        #print("inter size")
+        #print(blah.size())
+        #print("works size")
+        print(batch.size())
+        print(input.size())
+        #return blah
+
         return batch
 
 
