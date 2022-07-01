@@ -9,7 +9,6 @@ from urllib.request import urlopen
 from tqdm import tqdm
 import sys
 import os
-
 # pip install taming-transformers doesn't work with Gumbel, but does not yet work with coco etc
 # appending the path does work with Gumbel, but gives ModuleNotFoundError: No module named 'transformers' for coco etc
 sys.path.append('taming-transformers')
@@ -29,7 +28,7 @@ torch.backends.cudnn.benchmark = False		# NR: True is a bit faster, but can lead
 
 from torch_optimizer import DiffGrad, AdamP
 
-from CLIP import clip
+from clip import clip
 import kornia.augmentation as K
 import numpy as np
 import imageio
@@ -43,14 +42,14 @@ import re
 # Supress warnings
 import warnings
 warnings.filterwarnings('ignore')
-
+print("HEHE")
 
 # Check for GPU and reduce the default image size if low VRAM
-default_image_size = 512  # >8GB VRAM
-if not torch.cuda.is_available():
-    default_image_size = 256  # no GPU found
-elif get_device_properties(0).total_memory <= 2 ** 33:  # 2 ** 33 = 8,589,934,592 bytes = 8 GB
-    default_image_size = 304  # <8GB VRAM
+default_image_size = 256  # >8GB VRAM
+#if not torch.cuda.is_available():
+#    default_image_size = 256  # no GPU found
+#elif get_device_properties(0).total_memory <= 2 ** 33:  # 2 ** 33 = 8,589,934,592 bytes = 8 GB
+#    default_image_size = 304  # <8GB VRAM
 
 # Create the parser
 vq_parser = argparse.ArgumentParser(description='Image generation using VQGAN+CLIP')
@@ -90,7 +89,7 @@ vq_parser.add_argument("-ifps", "--input_video_fps", type=float, help="When crea
 vq_parser.add_argument("-d",    "--deterministic", action='store_true', help="Enable cudnn.deterministic?", dest='cudnn_determinism')
 vq_parser.add_argument("-aug",  "--augments", nargs='+', action='append', type=str, choices=['Ji','Sh','Gn','Pe','Ro','Af','Et','Ts','Cr','Er','Re'], help="Enabled augments (latest vut method only)", default=[], dest='augments')
 vq_parser.add_argument("-vsd",  "--video_style_dir", type=str, help="Directory with video frames to style", default=None, dest='video_style_dir')
-vq_parser.add_argument("-cd",   "--cuda_device", type=str, help="Cuda device to use", default="cuda:0", dest='cuda_device')
+vq_parser.add_argument("-cd",   "--cuda_device", type=str, help="Cuda device to use", default="cpu", dest='cuda_device')
 
 
 # Execute the parse_args() method
@@ -134,6 +133,7 @@ if args.make_video or args.make_zoom_video:
 
 # Fallback to CPU if CUDA is not found and make sure GPU video rendering is also disabled
 # NB. May not work for AMD cards?
+args.cuda_device == 'cpu'
 if not args.cuda_device == 'cpu' and not torch.cuda.is_available():
     args.cuda_device = 'cpu'
     args.video_fps = 0
@@ -545,7 +545,8 @@ def resize_image(image, out_size):
 device = torch.device(args.cuda_device)
 model = load_vqgan_model(args.vqgan_config, args.vqgan_checkpoint).to(device)
 jit = True if "1.7.1" in torch.__version__ else False
-perceptor = clip.load(args.clip_model, jit=jit)[0].eval().requires_grad_(False).to(device)
+#perceptor = clip.load(args.clip_model, jit=jit)[0].eval().requires_grad_(False).to(device)
+perceptor, preprocess = clip.load("ViT-B/32", device=device)
 
 # clock=deepcopy(perceptor.visual.positional_embedding.data)
 # perceptor.visual.positional_embedding.data = clock/clock.max()
@@ -630,6 +631,9 @@ normalize = transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
 if args.prompts:
     for prompt in args.prompts:
         txt, weight, stop = split_prompt(prompt)
+        text = clip.tokenize([txt]).to(device)
+        text_features = perceptor.encode_text(text)
+
         embed = perceptor.encode_text(clip.tokenize(txt).to(device)).float()
         pMs.append(Prompt(embed, weight, stop).to(device))
 
@@ -719,7 +723,7 @@ def checkin(i, losses):
 def ascend_txt():
     global i
     out = synth(z)
-    iii = perceptor.encode_image(normalize(make_cutouts(out))).float()
+    iii = perceptor.encode_image((make_cutouts(out))).float()
     
     result = []
 
@@ -728,6 +732,9 @@ def ascend_txt():
         result.append(F.mse_loss(z, torch.zeros_like(z_orig)) * ((1/torch.tensor(i*2 + 1))*args.init_weight) / 2)
 
     for prompt in pMs:
+        print(prompt)
+        print(prompt(iii))
+        print(iii)
         result.append(prompt(iii))
     
     if args.make_video:    
@@ -739,20 +746,29 @@ def ascend_txt():
 
 
 def train(i):
-    opt.zero_grad(set_to_none=True)
-    lossAll = ascend_txt()
+    opt.zero_grad()
+    # lossAll
+    print("TRAINING!")
+    print(i)
+    out = synth(z)
+    print("ENCONDING")
+    iii = perceptor.encode_image((make_cutouts(out))).float()
     
-    if i % args.display_freq == 0:
-        checkin(i, lossAll)
-       
-    loss = sum(lossAll)
-    loss.backward()
+     
+    print("LOSSING")
+    loss = pMs[0](iii)
+    print("BACKWARD")
+    loss.backward(retain_graph=True)
+    print("STEP")
     opt.step()
     
     #with torch.no_grad():
     with torch.inference_mode():
         z.copy_(z.maximum(z_min).minimum(z_max))
 
+    img = np.array(out.mul(255).clamp(0, 255)[0].cpu().detach().numpy().astype(np.uint8))[:,:,:]
+    img = np.transpose(img, (1, 2, 0))
+    imageio.imwrite('./steps_frank/' + str(i) + '.png', np.array(img))
 
 
 i = 0 # Iteration counter
