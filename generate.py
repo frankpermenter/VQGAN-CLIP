@@ -45,7 +45,7 @@ warnings.filterwarnings('ignore')
 print("HEHE")
 
 # Check for GPU and reduce the default image size if low VRAM
-default_image_size = 224  # >8GB VRAM
+default_image_size = 64  # >8GB VRAM
 #if not torch.cuda.is_available():
 #    default_image_size = 256  # no GPU found
 #elif get_device_properties(0).total_memory <= 2 ** 33:  # 2 ** 33 = 8,589,934,592 bytes = 8 GB
@@ -144,7 +144,7 @@ if args.make_video or args.make_zoom_video:
 # Fallback to CPU if CUDA is not found and make sure GPU video rendering is also disabled
 # NB. May not work for AMD cards?
 #args.cuda_device = 'cuda'
-args.cuda_device = 'cpu'
+args.cuda_device = 'cuda'
 if not args.cuda_device == 'cpu' and not torch.cuda.is_available():
     args.cuda_device = 'cpu'
     args.video_fps = 0
@@ -317,7 +317,8 @@ class MakeCutouts(nn.Module):
         self.cut_size = cut_size
         self.cutn = cutn
         self.cut_pow = cut_pow # not used with pooling
-        
+        print("HEHE CUTSIZE")
+        print(self.cut_size )
         self.transform = transforms.Resize((self.cut_size,self.cut_size))
         # Pick your own augments & their order
         augment_list = []
@@ -358,7 +359,12 @@ class MakeCutouts(nn.Module):
         self.max_pool = nn.AdaptiveMaxPool2d((self.cut_size, self.cut_size))
 
     def forward(self, input):
-        return input
+        print("MAKING CUT!")
+        print (input.size())
+        resize = transforms.Resize(self.cut_size)
+        blah = resize(input)
+        print(blah.size())
+        return blah
         cutouts = []
         
         for _ in range(self.cutn):            

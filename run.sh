@@ -1,1 +1,1 @@
-python generate.py -p "A painting of an apple in a fruit bowl" -r "./results_1_no_augments/" -cuts 1
+python generate.py -p "A fast car from the future" -r "./results_fast_car_gpu/" -cuts 1
